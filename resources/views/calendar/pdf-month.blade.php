@@ -78,7 +78,17 @@
     <h1>Récapitulatif des Heures - {{ ucfirst($date->translatedFormat('F Y')) }}</h1>
     
     <div class="info">
-        <strong>Horaires de base :</strong> {{ $baseStart }} - {{ $baseEnd }} (Pause: {{ $breakDuration }} min)
+        <strong>Horaires de base :</strong> 
+        @php
+            $dayNames = ['', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+            $workDays = [];
+            for ($i = 1; $i <= 7; $i++) {
+                if ($baseHours[$i]['start'] !== '00:00' || $baseHours[$i]['end'] !== '00:00') {
+                    $workDays[] = $dayNames[$i] . ' : ' . $baseHours[$i]['start'] . '-' . $baseHours[$i]['end'] . ' (Pause: ' . $baseHours[$i]['break'] . 'min)';
+                }
+            }
+            echo implode(' | ', $workDays);
+        @endphp
     </div>
     
     <div class="summary">

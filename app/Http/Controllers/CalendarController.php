@@ -17,10 +17,10 @@ class CalendarController extends Controller
         $startDate = $date->copy()->startOfMonth();
         $endDate = $date->copy()->endOfMonth();
         
-        // Récupérer les horaires de base depuis la session ou utiliser des valeurs par défaut
-        $baseStart = session('base_start_time', '09:00');
-        $baseEnd = session('base_end_time', '17:00');
-        $breakDuration = session('break_duration', 60);
+        // Récupérer les horaires de base depuis la session (ancienne méthode pour compatibilité)
+        $baseStart = session('base_start_time', config('workhours.defaults.1.start', '09:00'));
+        $baseEnd = session('base_end_time', config('workhours.defaults.1.end', '17:00'));
+        $breakDuration = session('break_duration', config('workhours.defaults.1.break', 60));
         
         // Utiliser un user_id par défaut (1) au lieu de Auth::id()
         $userId = 1;
@@ -42,16 +42,22 @@ class CalendarController extends Controller
         $current = $startDate->copy();
         while ($current <= $endDate) {
             $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso; // 1 = Lundi, 7 = Dimanche
+            
             $days[] = [
                 'date' => $current->copy(),
                 'overtime' => $overtimes->get($dateKey),
                 'is_weekend' => $current->isWeekend(),
                 'is_holiday' => in_array($dateKey, $holidays),
+                'day_of_week' => $dayOfWeek,
             ];
             $current->addDay();
         }
         
-        return view('calendar.index', compact('days', 'date', 'baseStart', 'baseEnd', 'breakDuration'));
+        // Charger les horaires par jour depuis la session
+        $baseHours = session('base_hours', []);
+        
+        return view('calendar.index', compact('days', 'date', 'baseStart', 'baseEnd', 'breakDuration', 'baseHours'));
     }
     
     private function getFrenchHolidays($year)
@@ -77,16 +83,13 @@ class CalendarController extends Controller
     public function setBaseHours(Request $request)
     {
         $request->validate([
-            'base_start_time' => 'required|date_format:H:i',
-            'base_end_time' => 'required|date_format:H:i',
-            'break_duration' => 'required|integer|min:0',
+            'day' => 'required|array',
+            'day.*.start' => 'required|date_format:H:i',
+            'day.*.end' => 'required|date_format:H:i',
+            'day.*.break' => 'required|integer|min:0',
         ]);
         
-        session([
-            'base_start_time' => $request->base_start_time,
-            'base_end_time' => $request->base_end_time,
-            'break_duration' => $request->break_duration,
-        ]);
+        session(['base_hours' => $request->day]);
         
         return response()->json(['success' => true, 'message' => 'Horaires de base enregistrés']);
     }
@@ -170,12 +173,20 @@ class CalendarController extends Controller
         $endDate = $date->copy()->endOfMonth();
         
         $userId = 1;
-        $baseStart = session('base_start_time', '09:00');
-        $baseEnd = session('base_end_time', '17:00');
-        $breakDuration = session('break_duration', 60);
+        
+        // Récupérer les horaires par jour depuis la session
+        $baseHours = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $baseHours[$i] = [
+                'start' => session('base_hours.' . $i . '.start', config('workhours.defaults.' . $i . '.start', '09:00')),
+                'end' => session('base_hours.' . $i . '.end', config('workhours.defaults.' . $i . '.end', '17:00')),
+                'break' => session('base_hours.' . $i . '.break', config('workhours.defaults.' . $i . '.break', 60)),
+            ];
+        }
         
         $overtimes = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
+            ->where('hours', '>', 0)
             ->orderBy('date')
             ->get();
         
@@ -186,7 +197,7 @@ class CalendarController extends Controller
         
         $pdf = \PDF::loadView('calendar.pdf-month', compact(
             'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalRecovered', 'balance',
-            'baseStart', 'baseEnd', 'breakDuration'
+            'baseHours'
         ));
         
         return $pdf->download('heures-' . $date->format('Y-m') . '.pdf');
@@ -198,12 +209,20 @@ class CalendarController extends Controller
         $endDate = $startDate->copy()->endOfWeek();
         
         $userId = 1;
-        $baseStart = session('base_start_time', '09:00');
-        $baseEnd = session('base_end_time', '17:00');
-        $breakDuration = session('break_duration', 60);
+        
+        // Récupérer les horaires par jour depuis la session
+        $baseHours = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $baseHours[$i] = [
+                'start' => session('base_hours.' . $i . '.start', config('workhours.defaults.' . $i . '.start', '09:00')),
+                'end' => session('base_hours.' . $i . '.end', config('workhours.defaults.' . $i . '.end', '17:00')),
+                'break' => session('base_hours.' . $i . '.break', config('workhours.defaults.' . $i . '.break', 60)),
+            ];
+        }
         
         $overtimes = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
+            ->where('hours', '>', 0)
             ->orderBy('date')
             ->get();
         
@@ -215,7 +234,7 @@ class CalendarController extends Controller
         
         $pdf = \PDF::loadView('calendar.pdf-week', compact(
             'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalRecovered', 'balance',
-            'weekNumber', 'baseStart', 'baseEnd', 'breakDuration'
+            'weekNumber', 'baseHours'
         ));
         
         return $pdf->download('heures-semaine-' . $weekNumber . '-' . $startDate->format('Y') . '.pdf');
