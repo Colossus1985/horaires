@@ -130,6 +130,26 @@
     box-shadow: 0 4px 12px rgba(149, 165, 166, 0.3);
 }
 
+.day-cell.has-negative {
+    border-color: #e74c3c;
+    border-width: 4px;
+    background: linear-gradient(135deg, #ffffff 0%, #ffeaea 100%);
+    position: relative;
+}
+
+.day-cell.has-negative:hover {
+    border-color: #c0392b;
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.5);
+}
+
+.day-cell.has-negative::before {
+    content: "⚠️";
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 16px;
+}
+
 .day-date {
     font-weight: bold;
     font-size: 18px;

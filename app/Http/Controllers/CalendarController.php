@@ -105,6 +105,8 @@ class CalendarController extends Controller
             'rate' => 'required|numeric|min:0',
             'break_duration' => 'required|integer|min:0',
             'recovered_hours' => 'nullable|numeric|min:0',
+            'reason' => 'nullable|string|max:255',
+            'exclude_from_balance' => 'nullable|boolean',
         ]);
         
         // Utiliser un user_id par défaut (1) au lieu de Auth::id()
@@ -154,6 +156,8 @@ class CalendarController extends Controller
                 'base_hours' => $overtime->base_hours,
                 'hours' => $overtime->hours,
                 'recovered_hours' => $request->recovered_hours ?? 0,
+                'reason' => $request->reason,
+                'exclude_from_balance' => $request->exclude_from_balance ?? false,
                 'description' => '',
             ]
         );
@@ -186,17 +190,21 @@ class CalendarController extends Controller
         
         $overtimes = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
-            ->where('hours', '>', 0)
+            ->whereNotNull('start_time')
+            ->whereNotNull('end_time')
             ->orderBy('date')
             ->get();
         
         $totalWorked = $overtimes->sum('worked_hours');
-        $totalOvertime = $overtimes->sum('hours');
-        $totalRecovered = $overtimes->sum('recovered_hours');
-        $balance = $totalOvertime - $totalRecovered;
+        $totalOvertime = $overtimes->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
+        $totalMissing = $overtimes->where('hours', '<', 0)->where('exclude_from_balance', false)->sum(function($item) {
+            return abs($item->hours);
+        });
+        $totalRecovered = $overtimes->where('exclude_from_balance', false)->sum('recovered_hours');
+        $balance = $totalOvertime - $totalMissing - $totalRecovered;
         
         $pdf = \PDF::loadView('calendar.pdf-month', compact(
-            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalRecovered', 'balance',
+            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'balance',
             'baseHours'
         ));
         
@@ -222,18 +230,22 @@ class CalendarController extends Controller
         
         $overtimes = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
-            ->where('hours', '>', 0)
+            ->whereNotNull('start_time')
+            ->whereNotNull('end_time')
             ->orderBy('date')
             ->get();
         
         $totalWorked = $overtimes->sum('worked_hours');
-        $totalOvertime = $overtimes->sum('hours');
-        $totalRecovered = $overtimes->sum('recovered_hours');
-        $balance = $totalOvertime - $totalRecovered;
+        $totalOvertime = $overtimes->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
+        $totalMissing = $overtimes->where('hours', '<', 0)->where('exclude_from_balance', false)->sum(function($item) {
+            return abs($item->hours);
+        });
+        $totalRecovered = $overtimes->where('exclude_from_balance', false)->sum('recovered_hours');
+        $balance = $totalOvertime - $totalMissing - $totalRecovered;
         $weekNumber = $startDate->week;
         
         $pdf = \PDF::loadView('calendar.pdf-week', compact(
-            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalRecovered', 'balance',
+            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'balance',
             'weekNumber', 'baseHours'
         ));
         

@@ -30,15 +30,18 @@
             text-align: center;
             background-color: #3498db;
             color: white;
-            width: 25%;
+            width: 20%;
         }
         .summary-item:nth-child(2) {
             background-color: #e74c3c;
         }
         .summary-item:nth-child(3) {
-            background-color: #f39c12;
+            background-color: #c0392b;
         }
         .summary-item:nth-child(4) {
+            background-color: #f39c12;
+        }
+        .summary-item:nth-child(5) {
             background-color: #27ae60;
         }
         .summary-item strong {
@@ -55,6 +58,10 @@
             border: 1px solid #ddd;
             padding: 8px;
             text-align: left;
+        }
+        th:last-child, td:last-child {
+            width: 150px;
+            min-width: 150px;
         }
         th {
             background-color: #34495e;
@@ -93,20 +100,24 @@
     
     <div class="summary">
         <div class="summary-item">
-            Heures travaillées
+            Travaillées
             <strong>{{ number_format($totalWorked, 2) }}h</strong>
         </div>
         <div class="summary-item">
-            Heures supplémentaires
+            Supplémentaires
             <strong>{{ number_format($totalOvertime, 2) }}h</strong>
         </div>
+        <div class="summary-item" style="background-color: #e74c3c;">
+            Manquantes
+            <strong>{{ number_format($totalMissing, 2) }}h</strong>
+        </div>
         <div class="summary-item">
-            Heures récupérées
+            Récupérées
             <strong>{{ number_format($totalRecovered, 2) }}h</strong>
         </div>
         <div class="summary-item">
             Solde
-            <strong>{{ number_format($balance, 2) }}h</strong>
+            <strong style="color: {{ $balance >= 0 ? '#2ecc71' : '#e74c3c' }}">{{ number_format($balance, 2) }}h</strong>
         </div>
     </div>
     
@@ -118,22 +129,37 @@
                 <th class="text-center">Début</th>
                 <th class="text-center">Fin</th>
                 <th class="text-center">Pause</th>
-                <th class="text-right">H. Travaillées</th>
-                <th class="text-right">H. Supp</th>
-                <th class="text-right">H. Récupérées</th>
+                <th class="text-right">Travaillées</th>
+                <th class="text-right">Supp</th>
+                <th class="text-right">Delta -</th>
+                <th>Raison</th>
             </tr>
         </thead>
         <tbody>
             @foreach($overtimes as $overtime)
-                <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}">
+                @php
+                    $dayOfWeek = $overtime->date->dayOfWeekIso;
+                    $baseStart = substr($baseHours[$dayOfWeek]['start'], 0, 5);
+                    $baseEnd = substr($baseHours[$dayOfWeek]['end'], 0, 5);
+                    $baseBreak = $baseHours[$dayOfWeek]['break'];
+                    $currentStart = substr($overtime->start_time, 0, 5);
+                    $currentEnd = substr($overtime->end_time, 0, 5);
+                    $currentBreak = $overtime->break_duration;
+                @endphp
+                <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}" style="{{ $overtime->hours < 0 ? 'background-color: #ffeaea;' : '' }}">
                     <td>{{ $overtime->date->format('d/m/Y') }}</td>
                     <td>{{ ucfirst($overtime->date->translatedFormat('l')) }}</td>
-                    <td class="text-center">{{ substr($overtime->start_time, 0, 5) }}</td>
-                    <td class="text-center">{{ substr($overtime->end_time, 0, 5) }}</td>
-                    <td class="text-center">{{ $overtime->break_duration }} min</td>
+                    <td class="text-center" style="{{ $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentStart }}</td>
+                    <td class="text-center" style="{{ $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentEnd }}</td>
+                    <td class="text-center" style="{{ $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentBreak }} min</td>
                     <td class="text-right">{{ number_format($overtime->worked_hours, 2) }}h</td>
-                    <td class="text-right">{{ number_format($overtime->hours, 2) }}h</td>
-                    <td class="text-right">{{ number_format($overtime->recovered_hours, 2) }}h</td>
+                    <td class="text-right">
+                        {{ $overtime->hours >= 0 ? number_format($overtime->hours, 2) . 'h' : '0.00h' }}
+                    </td>
+                    <td class="text-right" style="color: {{ $overtime->hours < 0 ? '#e74c3c' : '#000' }}; font-weight: {{ $overtime->hours < 0 ? 'bold' : 'normal' }}">
+                        {{ $overtime->hours < 0 && !$overtime->exclude_from_balance ? number_format(abs($overtime->hours), 2) . 'h' : ($overtime->exclude_from_balance ? '0.00h' : number_format($overtime->recovered_hours, 2) . 'h') }}
+                    </td>
+                    <td>{{ $overtime->reason ?? '' }}{{ $overtime->exclude_from_balance ? ' (Exclu)' : '' }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -143,6 +169,7 @@
                 <td class="text-right">{{ number_format($totalWorked, 2) }}h</td>
                 <td class="text-right">{{ number_format($totalOvertime, 2) }}h</td>
                 <td class="text-right">{{ number_format($totalRecovered, 2) }}h</td>
+                <td></td>
             </tr>
         </tfoot>
     </table>

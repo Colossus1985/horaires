@@ -27,6 +27,7 @@ function updateDayDisplay(dayCell) {
         parseInt(dayCell.querySelector(".break-duration").value) || 0;
     const display = dayCell.querySelector(".overtime-display");
     const recoveredSelect = dayCell.querySelector(".recovered-hours");
+    const excludeCheckbox = dayCell.querySelector(".exclude-balance");
 
     // Récupérer les horaires de base pour ce jour
     const defaultStart = dayCell.dataset.defaultStart;
@@ -37,14 +38,15 @@ function updateDayDisplay(dayCell) {
     const workedHours = calculateTimeDiff(startTime, endTime, breakDuration);
     // Heures de base effectives (avec pause de base déduite)
     const baseHours = calculateTimeDiff(defaultStart, defaultEnd, defaultBreak);
-    // Heures supplémentaires = différence entre heures travaillées et heures de base
-    const overtimeHours = Math.max(0, workedHours - baseHours);
+    // Heures supplémentaires = différence entre heures travaillées et heures de base (peut être négatif)
+    const overtimeHours = workedHours - baseHours;
 
     // Sauvegarder la valeur actuelle avant de reconstruire le select
     const currentRecovered = parseFloat(recoveredSelect.value) || 0;
 
     // Mettre à jour les options de récupération en fonction des heures supp disponibles
-    const maxRecoverable = Math.ceil(overtimeHours / 0.25) * 0.25; // Arrondir au 0.25 supérieur
+    const maxRecoverable =
+        overtimeHours > 0 ? Math.ceil(overtimeHours / 0.25) * 0.25 : 0;
 
     // Ne reconstruire que si le max a changé
     const lastMax = parseFloat(recoveredSelect.dataset.lastMax || "0");
@@ -69,25 +71,38 @@ function updateDayDisplay(dayCell) {
         }
     }
 
-    // Ajouter ou retirer la classe has-overtime
+    // Gestion des classes visuelles
+    dayCell.classList.remove("has-overtime", "has-negative", "fully-recovered");
+
+    // Vérifier si c'est un weekend ou jour férié
+    const isWeekendOrHoliday =
+        dayCell.classList.contains("weekend") ||
+        dayCell.classList.contains("holiday");
+
     if (overtimeHours > 0) {
         dayCell.classList.add("has-overtime");
-    } else {
-        dayCell.classList.remove("has-overtime");
+        const recoveredHours = parseFloat(recoveredSelect.value) || 0;
+        if (recoveredHours >= overtimeHours) {
+            dayCell.classList.add("fully-recovered");
+        }
+    } else if (overtimeHours < 0 && !isWeekendOrHoliday) {
+        // Ne marquer comme négatif que si ce n'est pas un weekend ou jour férié
+        dayCell.classList.add("has-negative");
     }
 
-    // Vérifier si toutes les heures supp sont récupérées
-    const recoveredHours = parseFloat(recoveredSelect.value) || 0;
-    if (overtimeHours > 0 && recoveredHours >= overtimeHours) {
-        dayCell.classList.add("fully-recovered");
-    } else {
-        dayCell.classList.remove("fully-recovered");
-    }
-
-    if (startTime && endTime && overtimeHours > 0) {
-        display.innerHTML = `<div style="color: #2ecc71; font-weight: bold;">+${formatHoursToHM(
-            overtimeHours
-        )}</div>`;
+    // Affichage des heures
+    if (startTime && endTime) {
+        if (overtimeHours > 0) {
+            display.innerHTML = `<div style="color: #2ecc71; font-weight: bold;">+${formatHoursToHM(
+                overtimeHours
+            )}</div>`;
+        } else if (overtimeHours < 0) {
+            display.innerHTML = `<div style="color: #e74c3c; font-weight: bold;">-${formatHoursToHM(
+                Math.abs(overtimeHours)
+            )}</div>`;
+        } else {
+            display.innerHTML = "";
+        }
     } else {
         display.innerHTML = "";
     }
@@ -98,6 +113,7 @@ function updateDayDisplay(dayCell) {
 function updateTotals() {
     let totalWorked = 0;
     let totalOvertime = 0;
+    let totalMissing = 0;
     let totalRecovered = 0;
 
     document.querySelectorAll(".day-cell[data-date]").forEach((cell) => {
@@ -107,6 +123,8 @@ function updateTotals() {
             parseInt(cell.querySelector(".break-duration").value) || 0;
         const recoveredHours =
             parseFloat(cell.querySelector(".recovered-hours").value) || 0;
+        const excludeFromBalance =
+            cell.querySelector(".exclude-balance").checked;
 
         // Récupérer les horaires de base spécifiques à ce jour
         const defaultStart = cell.dataset.defaultStart;
@@ -124,24 +142,35 @@ function updateTotals() {
                 defaultEnd,
                 defaultBreak
             );
-            const overtimeHours = Math.max(0, workedHours - baseHours);
+            const overtimeHours = workedHours - baseHours; // Peut être négatif
 
             totalWorked += workedHours;
-            totalOvertime += overtimeHours;
-            totalRecovered += recoveredHours;
+
+            // Compter les heures supp/négatives seulement si pas exclu du solde
+            if (!excludeFromBalance) {
+                if (overtimeHours > 0) {
+                    totalOvertime += overtimeHours;
+                } else if (overtimeHours < 0) {
+                    totalMissing += Math.abs(overtimeHours);
+                }
+                totalRecovered += recoveredHours;
+            }
         }
     });
 
-    const balance = totalOvertime - totalRecovered;
+    const balance = totalOvertime - totalMissing - totalRecovered;
 
     document.getElementById("total-worked").textContent =
         formatHoursToHM(totalWorked);
     document.getElementById("total-overtime").textContent =
         formatHoursToHM(totalOvertime);
+    document.getElementById("total-missing").textContent =
+        formatHoursToHM(totalMissing);
     document.getElementById("total-recovered").textContent =
         formatHoursToHM(totalRecovered);
-    document.getElementById("total-balance").textContent =
-        formatHoursToHM(balance);
+    document.getElementById("total-balance").textContent = formatHoursToHM(
+        Math.abs(balance)
+    );
     document.getElementById("total-balance").style.color =
         balance >= 0 ? "#2ecc71" : "#e74c3c";
 }
@@ -152,6 +181,9 @@ function saveDay(dayCell, saveUrl, csrfToken) {
     const endTime = dayCell.querySelector(".end-time").value;
     const breakDuration = dayCell.querySelector(".break-duration").value;
     const recoveredHours = dayCell.querySelector(".recovered-hours").value;
+    const reason = dayCell.querySelector(".reason-input").value;
+    const excludeFromBalance =
+        dayCell.querySelector(".exclude-balance").checked;
 
     // Récupérer les horaires de base pour ce jour spécifique
     const baseStartTime = dayCell.dataset.defaultStart;
@@ -173,6 +205,8 @@ function saveDay(dayCell, saveUrl, csrfToken) {
             base_end_time: baseEndTime,
             break_duration: breakDuration,
             recovered_hours: recoveredHours,
+            reason: reason,
+            exclude_from_balance: excludeFromBalance,
             rate: 15,
         }),
     })

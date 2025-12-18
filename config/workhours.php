@@ -14,7 +14,7 @@ return [
         ],
         3 => [ // Mercredi
             'start' => '08:00',
-            'end' => '13:30',
+            'end' => '14:00',
             'break' => 0,
         ],
         4 => [ // Jeudi
@@ -24,8 +24,8 @@ return [
         ],
         5 => [ // Vendredi
             'start' => '08:00',
-            'end' => '13:00',
-            'break' => 0,
+            'end' => '13:30',
+            'break' => 30,
         ],
         6 => [ // Samedi
             'start' => '00:00',

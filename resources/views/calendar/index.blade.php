@@ -27,6 +27,10 @@
                 <h4>Heures supplémentaires</h4>
                 <div class="value" id="total-overtime">0h00</div>
             </div>
+            <div class="stat-box" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);">
+                <h4>Heures manquantes</h4>
+                <div class="value" id="total-missing">0h00</div>
+            </div>
             <div class="stat-box" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
                 <h4>Heures récupérées</h4>
                 <div class="value" id="total-recovered">0h00</div>
@@ -169,11 +173,8 @@
                         
                         <div class="time-group">
                             <label>Récupérées</label>
-                            <select class="recovered-hours" data-last-max="{{ $day['overtime'] ? ceil($day['overtime']->hours / 0.25) * 0.25 : 0 }}" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
-                                @php
-                                    $maxRecoverable = $day['overtime'] ? ceil($day['overtime']->hours / 0.25) * 0.25 : 0;
-                                @endphp
-                                @for($i = 0; $i <= min($maxRecoverable * 4, 48); $i++)
+                            <select class="recovered-hours" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; width: 100%;">
+                                @for($i = 0; $i <= 48; $i++)
                                     @php 
                                         $hours = $i * 0.25;
                                         $h = floor($hours);
@@ -183,6 +184,21 @@
                                     <option value="{{ $hours }}" {{ ($day['overtime']->recovered_hours ?? 0) == $hours ? 'selected' : '' }}>{{ $formatted }}</option>
                                 @endfor
                             </select>
+                        </div>
+                        
+                        <div class="time-group">
+                            <label>Raison</label>
+                            <input type="text" class="reason-input" placeholder="Ex: Maladie, Congé..." 
+                                   value="{{ $day['overtime']->reason ?? '' }}" 
+                                   style="padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px; width: 100%;">
+                        </div>
+                        
+                        <div class="time-group">
+                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                                <input type="checkbox" class="exclude-balance" {{ ($day['overtime']->exclude_from_balance ?? false) ? 'checked' : '' }}
+                                       style="cursor: pointer;">
+                                <span style="font-size: 11px;">Exclure du solde</span>
+                            </label>
                         </div>
                     </div>
 
@@ -195,6 +211,15 @@
                             @endphp
                             <div style="color: #2ecc71; font-weight: bold;">
                                 +{{ $formatted }}
+                            </div>
+                        @elseif($day['overtime'] && $day['overtime']->hours < 0)
+                            @php
+                                $h = floor(abs($day['overtime']->hours));
+                                $m = round((abs($day['overtime']->hours) - $h) * 60);
+                                $formatted = sprintf('%dh%02d', $h, $m);
+                            @endphp
+                            <div style="color: #e74c3c; font-weight: bold;">
+                                -{{ $formatted }}
                             </div>
                         @endif
                     </div>

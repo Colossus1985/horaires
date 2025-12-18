@@ -24,6 +24,8 @@ class Overtime extends Model
         'worked_hours',
         'break_duration',
         'recovered_hours',
+        'reason',
+        'exclude_from_balance',
     ];
 
     protected $casts = [
@@ -34,6 +36,7 @@ class Overtime extends Model
         'worked_hours' => 'decimal:2',
         'break_duration' => 'integer',
         'recovered_hours' => 'decimal:2',
+        'exclude_from_balance' => 'boolean',
     ];
 
     public function user()
@@ -76,6 +79,7 @@ class Overtime extends Model
         }
 
         // Heures supplémentaires = durée de présence - durée de présence de base (indépendant de la pause)
-        $this->hours = max(0, $this->worked_hours - $this->base_hours);
+        // Peut être négatif si on travaille moins que la base
+        $this->hours = $this->worked_hours - $this->base_hours;
     }
 }
