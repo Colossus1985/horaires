@@ -92,20 +92,25 @@
         // Recalculer le total des heures travaillées à partir des horaires affichés
         $displayedTotalWorked = 0;
         foreach($overtimes as $ot) {
-            if (!$ot->date->isWeekend()) {
-                $dow = $ot->date->dayOfWeekIso;
-                $displayStart = $ot->start_time ? substr($ot->start_time, 0, 5) : substr($baseHours[$dow]['start'], 0, 5);
-                $displayEnd = $ot->end_time ? substr($ot->end_time, 0, 5) : substr($baseHours[$dow]['end'], 0, 5);
-                $displayBreak = $ot->start_time ? $ot->break_duration : $baseHours[$dow]['break'];
-                
-                if (!($displayStart === '00:00' && $displayEnd === '00:00')) {
-                    list($sh, $sm) = explode(':', $displayStart);
-                    list($eh, $em) = explode(':', $displayEnd);
-                    $startMinutes = (int)$sh * 60 + (int)$sm;
-                    $endMinutes = (int)$eh * 60 + (int)$em;
-                    $totalMinutes = $endMinutes - $startMinutes - $displayBreak;
-                    $displayedTotalWorked += $totalMinutes / 60;
-                }
+            $dow = $ot->date->dayOfWeekIso;
+            
+            // Pour les weekends, ne compter que s'ils sont travaillés (avec start_time)
+            // Pour les jours en semaine, compter les heures affichées ou de base
+            if ($ot->date->isWeekend() && !$ot->start_time) {
+                continue; // Weekend non travaillé, on saute
+            }
+            
+            $displayStart = $ot->start_time ? substr($ot->start_time, 0, 5) : substr($baseHours[$dow]['start'], 0, 5);
+            $displayEnd = $ot->end_time ? substr($ot->end_time, 0, 5) : substr($baseHours[$dow]['end'], 0, 5);
+            $displayBreak = $ot->start_time ? $ot->break_duration : $baseHours[$dow]['break'];
+            
+            if (!($displayStart === '00:00' && $displayEnd === '00:00')) {
+                list($sh, $sm) = explode(':', $displayStart);
+                list($eh, $em) = explode(':', $displayEnd);
+                $startMinutes = (int)$sh * 60 + (int)$sm;
+                $endMinutes = (int)$eh * 60 + (int)$em;
+                $totalMinutes = $endMinutes - $startMinutes - $displayBreak;
+                $displayedTotalWorked += $totalMinutes / 60;
             }
         }
     @endphp
@@ -133,6 +138,10 @@
         <div class="summary-item">
             Supplémentaires
             <strong>{{ formatHoursMinutes($totalOvertime) }}</strong>
+        </div>
+        <div class="summary-item" style="background-color: #ff9800;">
+            Weekends/Fériés
+            <strong>{{ formatHoursMinutes($totalWeekendHoliday) }}</strong>
         </div>
         <div class="summary-item" style="background-color: #e74c3c;">
             Manquantes
@@ -174,12 +183,12 @@
                     $currentEnd = $overtime->end_time ? substr($overtime->end_time, 0, 5) : '-';
                     $currentBreak = $overtime->break_duration;
                 @endphp
-                <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}" style="{{ $overtime->hours < 0 ? 'background-color: #ffeaea;' : '' }}">
+                <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}" style="{{ $overtime->date->isWeekend() && $overtime->start_time ? 'background-color: #ffcccc; color: #e67e22; font-weight: bold;' : ($overtime->hours < 0 ? 'background-color: #ffeaea;' : '') }}">
                     <td>{{ $overtime->date->format('d/m/Y') }}</td>
                     <td>{{ ucfirst($overtime->date->translatedFormat('l')) }}</td>
-                    <td class="text-center" style="{{ $overtime->start_time && $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentStart : $baseStart }}</td>
-                    <td class="text-center" style="{{ $overtime->end_time && $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->end_time ? $currentEnd : $baseEnd }}</td>
-                    <td class="text-center" style="{{ $overtime->start_time && $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentBreak : $baseBreak }} min</td>
+                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->start_time && $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentStart : $baseStart }}</td>
+                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->end_time && $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->end_time ? $currentEnd : $baseEnd }}</td>
+                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->start_time && $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentBreak : $baseBreak }} min</td>
                     <td class="text-right">
                         @php
                             // Calculer les heures travaillées à partir des horaires affichés
@@ -188,7 +197,8 @@
                             $displayBreak = $overtime->start_time ? $currentBreak : $baseBreak;
                             
                             $workedHours = '-';
-                            if (!$overtime->date->isWeekend() && !($displayStart === '00:00' && $displayEnd === '00:00')) {
+                            // Afficher les heures pour les jours en semaine OU les weekends travaillés
+                            if ((!$overtime->date->isWeekend() || $overtime->start_time) && !($displayStart === '00:00' && $displayEnd === '00:00')) {
                                 try {
                                     list($sh, $sm) = explode(':', $displayStart);
                                     list($eh, $em) = explode(':', $displayEnd);
@@ -205,10 +215,34 @@
                         @endphp
                     </td>
                     <td class="text-right">
-                        {{ $overtime->start_time && $overtime->hours >= 0 ? formatHoursMinutes($overtime->hours) : '-' }}
+                        @php
+                            // Pour les weekends travaillés, afficher les heures dans Supp
+                            if ($overtime->date->isWeekend() && $overtime->start_time) {
+                                $displayStart = $currentStart;
+                                $displayEnd = $currentEnd;
+                                $displayBreak = $currentBreak;
+                                list($sh, $sm) = explode(':', $displayStart);
+                                list($eh, $em) = explode(':', $displayEnd);
+                                $startMinutes = (int)$sh * 60 + (int)$sm;
+                                $endMinutes = (int)$eh * 60 + (int)$em;
+                                $totalMinutes = $endMinutes - $startMinutes - $displayBreak;
+                                $weekendHours = $totalMinutes / 60;
+                                echo formatHoursMinutes($weekendHours);
+                            } else {
+                                echo $overtime->start_time && $overtime->hours >= 0 ? formatHoursMinutes($overtime->hours) : '-';
+                            }
+                        @endphp
                     </td>
                     <td class="text-right" style="color: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? '#e74c3c' : '#000' }}; font-weight: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? 'bold' : 'normal' }}">
-                        {{ $overtime->start_time ? ($overtime->recovered_hours > 0 ? formatHoursMinutes($overtime->recovered_hours) : ($overtime->hours < 0 ? formatHoursMinutes(abs($overtime->hours)) : '-')) : '-' }}
+                        @php
+                            // Pour les weekends, afficher uniquement les heures récupérées
+                            if ($overtime->date->isWeekend() && $overtime->start_time) {
+                                echo $overtime->recovered_hours > 0 ? formatHoursMinutes($overtime->recovered_hours) : '-';
+                            } else {
+                                // Pour les jours en semaine, afficher récupérées OU heures négatives
+                                echo $overtime->start_time ? ($overtime->recovered_hours > 0 ? formatHoursMinutes($overtime->recovered_hours) : ($overtime->hours < 0 ? formatHoursMinutes(abs($overtime->hours)) : '-')) : '-';
+                            }
+                        @endphp
                     </td>
                     <td>{{ $overtime->reason ?? '' }}{{ $overtime->exclude_from_balance ? ' (Exclu)' : '' }}</td>
                 </tr>
@@ -220,7 +254,7 @@
                 <td colspan="5">TOTAL</td>
                 <td class="text-right">{{ formatHoursMinutes($displayedTotalWorked) }}</td>
                 <td class="text-right">{{ formatHoursMinutes($totalOvertime) }}</td>
-                <td class="text-right">{{ formatHoursMinutes($totalRecovered) }}</td>
+                <td class="text-right">{{ formatHoursMinutes($totalRecoveredDisplay) }}</td>
                 <td></td>
             </tr>
         </tfoot>

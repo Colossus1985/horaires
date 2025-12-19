@@ -104,9 +104,17 @@
             @foreach($days as $day)
                 @php
                     $dayOfWeek = $day['day_of_week'];
-                    $defaultStart = $baseHours[$dayOfWeek]['start'] ?? $baseStart ?? '09:00';
-                    $defaultEnd = $baseHours[$dayOfWeek]['end'] ?? $baseEnd ?? '17:00';
-                    $defaultBreak = $baseHours[$dayOfWeek]['break'] ?? $breakDuration ?? 60;
+                    
+                    // Pour les weekends et jours fériés, horaires de base à 00:00-00:00
+                    if ($day['is_weekend'] || $day['is_holiday']) {
+                        $defaultStart = '00:00';
+                        $defaultEnd = '00:00';
+                        $defaultBreak = 0;
+                    } else {
+                        $defaultStart = $baseHours[$dayOfWeek]['start'] ?? $baseStart ?? '09:00';
+                        $defaultEnd = $baseHours[$dayOfWeek]['end'] ?? $baseEnd ?? '17:00';
+                        $defaultBreak = $baseHours[$dayOfWeek]['break'] ?? $breakDuration ?? 60;
+                    }
                     
                     // Afficher le numéro de semaine pour le lundi
                     if ($day['date']->dayOfWeekIso == 1) {

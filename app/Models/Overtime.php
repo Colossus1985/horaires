@@ -60,8 +60,8 @@ class Overtime extends Model
                 $end->addDay();
             }
             
-            // Heures travaillées = durée de présence (la pause n'influence pas)
-            $totalMinutes = $start->diffInMinutes($end, false);
+            // Heures travaillées = durée de présence - pause
+            $totalMinutes = $start->diffInMinutes($end, false) - $this->break_duration;
             $this->worked_hours = $totalMinutes / 60;
         }
 
@@ -74,11 +74,14 @@ class Overtime extends Model
                 $end->addDay();
             }
             
-            // Base hours = durée de présence de base
-            $this->base_hours = $start->diffInMinutes($end, false) / 60;
+            // Base hours = durée de présence de base - pause de base
+            // Note: La pause de base devrait être stockée ou récupérée depuis la session
+            // Pour l'instant, on utilise break_duration si c'est le même jour
+            $baseBreak = session('base_hours.' . $this->date->dayOfWeekIso . '.break', 0);
+            $this->base_hours = $start->diffInMinutes($end, false) / 60 - ($baseBreak / 60);
         }
 
-        // Heures supplémentaires = durée de présence - durée de présence de base (indépendant de la pause)
+        // Heures supplémentaires = heures travaillées - heures de base
         // Peut être négatif si on travaille moins que la base
         $this->hours = $this->worked_hours - $this->base_hours;
     }

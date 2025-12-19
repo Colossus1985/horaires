@@ -54,8 +54,15 @@ class CalendarController extends Controller
             $current->addDay();
         }
         
-        // Charger les horaires par jour depuis la session
-        $baseHours = session('base_hours', []);
+        // Charger les horaires par jour depuis la session, avec fallback sur le config
+        $baseHours = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $baseHours[$i] = [
+                'start' => session('base_hours.' . $i . '.start', config('workhours.defaults.' . $i . '.start', '09:00')),
+                'end' => session('base_hours.' . $i . '.end', config('workhours.defaults.' . $i . '.end', '17:00')),
+                'break' => session('base_hours.' . $i . '.break', config('workhours.defaults.' . $i . '.break', 60)),
+            ];
+        }
         
         return view('calendar.index', compact('days', 'date', 'baseStart', 'baseEnd', 'breakDuration', 'baseHours'));
     }
@@ -224,26 +231,32 @@ class CalendarController extends Controller
             $current->addDay();
         }
         
-        $totalWorked = $overtimesData->sum('worked_hours');
-        
-        // Ajouter les heures de base des jours non saisis (hors week-ends)
+        // Calculer le total des heures travaillées en incluant les weekends travaillés
+        $totalWorked = 0;
         $current = $startDate->copy();
         while ($current <= $endDate) {
             $dateKey = $current->format('Y-m-d');
             $dayOfWeek = $current->dayOfWeekIso;
             
-            // Si jour non saisi et pas un weekend
-            if (!$overtimesData->has($dateKey) && !$current->isWeekend()) {
+            if ($overtimesData->has($dateKey)) {
+                // Jour saisi : utiliser les heures affichées
+                $ot = $overtimesData[$dateKey];
+                if ($ot->start_time) {
+                    // Recalculer à partir des horaires saisis
+                    $start = \Carbon\Carbon::parse($ot->start_time);
+                    $end = \Carbon\Carbon::parse($ot->end_time);
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                }
+            } else if (!$current->isWeekend()) {
+                // Jour non saisi et pas un weekend : utiliser les heures de base
                 $baseStart = $baseHours[$dayOfWeek]['start'];
                 $baseEnd = $baseHours[$dayOfWeek]['end'];
                 $baseBreak = $baseHours[$dayOfWeek]['break'];
                 
-                // Calculer les heures de base si ce n'est pas 00:00-00:00
                 if (!($baseStart === '00:00' && $baseEnd === '00:00')) {
                     $start = \Carbon\Carbon::createFromFormat('H:i', $baseStart);
                     $end = \Carbon\Carbon::createFromFormat('H:i', $baseEnd);
-                    $baseHoursDecimal = $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
-                    $totalWorked += $baseHoursDecimal;
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
                 }
             }
             $current->addDay();
@@ -253,12 +266,30 @@ class CalendarController extends Controller
         $totalMissing = $overtimesData->where('hours', '<', 0)->where('exclude_from_balance', false)->where('recovered_hours', 0)->sum(function($item) {
             return abs($item->hours);
         });
+        
+        // Total des heures récupérées pour affichage dans le tableau (toutes)
+        $totalRecoveredDisplay = $overtimesData->sum('recovered_hours');
+        
+        // Total des heures récupérées pour le calcul du solde (seulement non-exclues)
         $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
+        
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         
+        // Calculer les heures travaillées en weekend/jours fériés
+        $holidays = $this->getFrenchHolidays($date->year);
+        $totalWeekendHoliday = 0;
+        foreach($overtimesData as $ot) {
+            if ($ot->start_time && ($ot->date->isWeekend() || in_array($ot->date->format('Y-m-d'), $holidays))) {
+                $start = \Carbon\Carbon::parse($ot->start_time);
+                $end = \Carbon\Carbon::parse($ot->end_time);
+                $hoursWorked = $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                $totalWeekendHoliday += abs($hoursWorked); // Valeur absolue pour toujours afficher positif
+            }
+        }
+        
         $pdf = \PDF::loadView('calendar.pdf-month', compact(
-            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'balance',
-            'baseHours'
+            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'baseHours', 'totalWeekendHoliday'
         ));
         
         return $pdf->download('heures-' . $date->format('Y-m') . '.pdf');
@@ -317,26 +348,32 @@ class CalendarController extends Controller
             $current->addDay();
         }
         
-        $totalWorked = $overtimesData->sum('worked_hours');
-        
-        // Ajouter les heures de base des jours non saisis (hors week-ends)
+        // Calculer le total des heures travaillées en incluant les weekends travaillés
+        $totalWorked = 0;
         $current = $startDate->copy();
         while ($current <= $endDate) {
             $dateKey = $current->format('Y-m-d');
             $dayOfWeek = $current->dayOfWeekIso;
             
-            // Si jour non saisi et pas un weekend
-            if (!$overtimesData->has($dateKey) && !$current->isWeekend()) {
+            if ($overtimesData->has($dateKey)) {
+                // Jour saisi : utiliser les heures affichées
+                $ot = $overtimesData[$dateKey];
+                if ($ot->start_time) {
+                    // Recalculer à partir des horaires saisis
+                    $start = \Carbon\Carbon::parse($ot->start_time);
+                    $end = \Carbon\Carbon::parse($ot->end_time);
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                }
+            } else if (!$current->isWeekend()) {
+                // Jour non saisi et pas un weekend : utiliser les heures de base
                 $baseStart = $baseHours[$dayOfWeek]['start'];
                 $baseEnd = $baseHours[$dayOfWeek]['end'];
                 $baseBreak = $baseHours[$dayOfWeek]['break'];
                 
-                // Calculer les heures de base si ce n'est pas 00:00-00:00
                 if (!($baseStart === '00:00' && $baseEnd === '00:00')) {
                     $start = \Carbon\Carbon::createFromFormat('H:i', $baseStart);
                     $end = \Carbon\Carbon::createFromFormat('H:i', $baseEnd);
-                    $baseHoursDecimal = $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
-                    $totalWorked += $baseHoursDecimal;
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
                 }
             }
             $current->addDay();
@@ -346,13 +383,31 @@ class CalendarController extends Controller
         $totalMissing = $overtimesData->where('hours', '<', 0)->where('exclude_from_balance', false)->where('recovered_hours', 0)->sum(function($item) {
             return abs($item->hours);
         });
+        
+        // Total des heures récupérées pour affichage dans le tableau (toutes)
+        $totalRecoveredDisplay = $overtimesData->sum('recovered_hours');
+        
+        // Total des heures récupérées pour le calcul du solde (seulement non-exclues)
         $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
+        
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         $weekNumber = $startDate->week;
         
+        // Calculer les heures travaillées en weekend/jours fériés
+        $holidays = $this->getFrenchHolidays($startDate->year);
+        $totalWeekendHoliday = 0;
+        foreach($overtimesData as $ot) {
+            if ($ot->start_time && ($ot->date->isWeekend() || in_array($ot->date->format('Y-m-d'), $holidays))) {
+                $start = \Carbon\Carbon::parse($ot->start_time);
+                $end = \Carbon\Carbon::parse($ot->end_time);
+                $hoursWorked = $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                $totalWeekendHoliday += abs($hoursWorked); // Valeur absolue pour toujours afficher positif
+            }
+        }
+        
         $pdf = \PDF::loadView('calendar.pdf-week', compact(
-            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'balance',
-            'weekNumber', 'baseHours'
+            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'weekNumber', 'baseHours', 'totalWeekendHoliday'
         ));
         
         return $pdf->download('heures-semaine-' . $weekNumber . '-' . $startDate->format('Y') . '.pdf');
