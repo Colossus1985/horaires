@@ -188,19 +188,72 @@ class CalendarController extends Controller
             ];
         }
         
-        $overtimes = Overtime::where('user_id', $userId)
+        $overtimesData = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
-            ->whereNotNull('start_time')
-            ->whereNotNull('end_time')
             ->orderBy('date')
-            ->get();
+            ->get()
+            ->keyBy(function($item) {
+                return $item->date->format('Y-m-d');
+            });
         
-        $totalWorked = $overtimes->sum('worked_hours');
-        $totalOvertime = $overtimes->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
-        $totalMissing = $overtimes->where('hours', '<', 0)->where('exclude_from_balance', false)->sum(function($item) {
+        // Créer une collection avec tous les jours du mois
+        $overtimes = collect();
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            if ($overtimesData->has($dateKey)) {
+                $overtimes->push($overtimesData[$dateKey]);
+            } else {
+                // Créer un objet vide pour les jours sans données
+                $empty = new Overtime();
+                $empty->date = $current->copy();
+                $empty->start_time = null;
+                $empty->end_time = null;
+                $empty->break_duration = 0;
+                $empty->worked_hours = 0;
+                $empty->hours = 0;
+                $empty->recovered_hours = 0;
+                $empty->reason = null;
+                $empty->exclude_from_balance = false;
+                $empty->base_start_time = $baseHours[$dayOfWeek]['start'];
+                $empty->base_end_time = $baseHours[$dayOfWeek]['end'];
+                $overtimes->push($empty);
+            }
+            $current->addDay();
+        }
+        
+        $totalWorked = $overtimesData->sum('worked_hours');
+        
+        // Ajouter les heures de base des jours non saisis (hors week-ends)
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            // Si jour non saisi et pas un weekend
+            if (!$overtimesData->has($dateKey) && !$current->isWeekend()) {
+                $baseStart = $baseHours[$dayOfWeek]['start'];
+                $baseEnd = $baseHours[$dayOfWeek]['end'];
+                $baseBreak = $baseHours[$dayOfWeek]['break'];
+                
+                // Calculer les heures de base si ce n'est pas 00:00-00:00
+                if (!($baseStart === '00:00' && $baseEnd === '00:00')) {
+                    $start = \Carbon\Carbon::createFromFormat('H:i', $baseStart);
+                    $end = \Carbon\Carbon::createFromFormat('H:i', $baseEnd);
+                    $baseHoursDecimal = $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
+                    $totalWorked += $baseHoursDecimal;
+                }
+            }
+            $current->addDay();
+        }
+        
+        $totalOvertime = $overtimesData->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
+        $totalMissing = $overtimesData->where('hours', '<', 0)->where('exclude_from_balance', false)->where('recovered_hours', 0)->sum(function($item) {
             return abs($item->hours);
         });
-        $totalRecovered = $overtimes->where('exclude_from_balance', false)->sum('recovered_hours');
+        $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         
         $pdf = \PDF::loadView('calendar.pdf-month', compact(
@@ -228,19 +281,72 @@ class CalendarController extends Controller
             ];
         }
         
-        $overtimes = Overtime::where('user_id', $userId)
+        $overtimesData = Overtime::where('user_id', $userId)
             ->whereBetween('date', [$startDate, $endDate])
-            ->whereNotNull('start_time')
-            ->whereNotNull('end_time')
             ->orderBy('date')
-            ->get();
+            ->get()
+            ->keyBy(function($item) {
+                return $item->date->format('Y-m-d');
+            });
         
-        $totalWorked = $overtimes->sum('worked_hours');
-        $totalOvertime = $overtimes->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
-        $totalMissing = $overtimes->where('hours', '<', 0)->where('exclude_from_balance', false)->sum(function($item) {
+        // Créer une collection avec tous les jours de la semaine
+        $overtimes = collect();
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            if ($overtimesData->has($dateKey)) {
+                $overtimes->push($overtimesData[$dateKey]);
+            } else {
+                // Créer un objet vide pour les jours sans données
+                $empty = new Overtime();
+                $empty->date = $current->copy();
+                $empty->start_time = null;
+                $empty->end_time = null;
+                $empty->break_duration = 0;
+                $empty->worked_hours = 0;
+                $empty->hours = 0;
+                $empty->recovered_hours = 0;
+                $empty->reason = null;
+                $empty->exclude_from_balance = false;
+                $empty->base_start_time = $baseHours[$dayOfWeek]['start'];
+                $empty->base_end_time = $baseHours[$dayOfWeek]['end'];
+                $overtimes->push($empty);
+            }
+            $current->addDay();
+        }
+        
+        $totalWorked = $overtimesData->sum('worked_hours');
+        
+        // Ajouter les heures de base des jours non saisis (hors week-ends)
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            // Si jour non saisi et pas un weekend
+            if (!$overtimesData->has($dateKey) && !$current->isWeekend()) {
+                $baseStart = $baseHours[$dayOfWeek]['start'];
+                $baseEnd = $baseHours[$dayOfWeek]['end'];
+                $baseBreak = $baseHours[$dayOfWeek]['break'];
+                
+                // Calculer les heures de base si ce n'est pas 00:00-00:00
+                if (!($baseStart === '00:00' && $baseEnd === '00:00')) {
+                    $start = \Carbon\Carbon::createFromFormat('H:i', $baseStart);
+                    $end = \Carbon\Carbon::createFromFormat('H:i', $baseEnd);
+                    $baseHoursDecimal = $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
+                    $totalWorked += $baseHoursDecimal;
+                }
+            }
+            $current->addDay();
+        }
+        
+        $totalOvertime = $overtimesData->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
+        $totalMissing = $overtimesData->where('hours', '<', 0)->where('exclude_from_balance', false)->where('recovered_hours', 0)->sum(function($item) {
             return abs($item->hours);
         });
-        $totalRecovered = $overtimes->where('exclude_from_balance', false)->sum('recovered_hours');
+        $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         $weekNumber = $startDate->week;
         

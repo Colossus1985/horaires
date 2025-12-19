@@ -150,7 +150,8 @@ function updateTotals() {
             if (!excludeFromBalance) {
                 if (overtimeHours > 0) {
                     totalOvertime += overtimeHours;
-                } else if (overtimeHours < 0) {
+                } else if (overtimeHours < 0 && recoveredHours === 0) {
+                    // Ne compter les heures manquantes que si pas de récupération saisie
                     totalMissing += Math.abs(overtimeHours);
                 }
                 totalRecovered += recoveredHours;

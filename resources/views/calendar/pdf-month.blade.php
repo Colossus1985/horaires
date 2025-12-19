@@ -82,6 +82,33 @@
     </style>
 </head>
 <body>
+    @php
+        function formatHoursMinutes($decimalHours) {
+            $hours = floor($decimalHours);
+            $minutes = round(($decimalHours - $hours) * 60);
+            return sprintf('%dh%02d', $hours, $minutes);
+        }
+        
+        // Recalculer le total des heures travaillées à partir des horaires affichés
+        $displayedTotalWorked = 0;
+        foreach($overtimes as $ot) {
+            if (!$ot->date->isWeekend()) {
+                $dow = $ot->date->dayOfWeekIso;
+                $displayStart = $ot->start_time ? substr($ot->start_time, 0, 5) : substr($baseHours[$dow]['start'], 0, 5);
+                $displayEnd = $ot->end_time ? substr($ot->end_time, 0, 5) : substr($baseHours[$dow]['end'], 0, 5);
+                $displayBreak = $ot->start_time ? $ot->break_duration : $baseHours[$dow]['break'];
+                
+                if (!($displayStart === '00:00' && $displayEnd === '00:00')) {
+                    list($sh, $sm) = explode(':', $displayStart);
+                    list($eh, $em) = explode(':', $displayEnd);
+                    $startMinutes = (int)$sh * 60 + (int)$sm;
+                    $endMinutes = (int)$eh * 60 + (int)$em;
+                    $totalMinutes = $endMinutes - $startMinutes - $displayBreak;
+                    $displayedTotalWorked += $totalMinutes / 60;
+                }
+            }
+        }
+    @endphp
     <h1>Récapitulatif des Heures - {{ ucfirst($date->translatedFormat('F Y')) }}</h1>
     
     <div class="info">
@@ -101,23 +128,23 @@
     <div class="summary">
         <div class="summary-item">
             Travaillées
-            <strong>{{ number_format($totalWorked, 2) }}h</strong>
+            <strong>{{ formatHoursMinutes($displayedTotalWorked) }}</strong>
         </div>
         <div class="summary-item">
             Supplémentaires
-            <strong>{{ number_format($totalOvertime, 2) }}h</strong>
+            <strong>{{ formatHoursMinutes($totalOvertime) }}</strong>
         </div>
         <div class="summary-item" style="background-color: #e74c3c;">
             Manquantes
-            <strong>{{ number_format($totalMissing, 2) }}h</strong>
+            <strong>{{ formatHoursMinutes($totalMissing) }}</strong>
         </div>
         <div class="summary-item">
             Récupérées
-            <strong>{{ number_format($totalRecovered, 2) }}h</strong>
+            <strong>{{ formatHoursMinutes($totalRecovered) }}</strong>
         </div>
         <div class="summary-item">
             Solde
-            <strong style="color: {{ $balance >= 0 ? '#2ecc71' : '#e74c3c' }}">{{ number_format($balance, 2) }}h</strong>
+            <strong style="color: {{ $balance >= 0 ? '#2ecc71' : '#e74c3c' }}">{{ formatHoursMinutes(abs($balance)) }}</strong>
         </div>
     </div>
     
@@ -137,38 +164,63 @@
         </thead>
         <tbody>
             @foreach($overtimes as $overtime)
+                @if($overtime->start_time || !$overtime->date->isWeekend())
                 @php
                     $dayOfWeek = $overtime->date->dayOfWeekIso;
                     $baseStart = substr($baseHours[$dayOfWeek]['start'], 0, 5);
                     $baseEnd = substr($baseHours[$dayOfWeek]['end'], 0, 5);
                     $baseBreak = $baseHours[$dayOfWeek]['break'];
-                    $currentStart = substr($overtime->start_time, 0, 5);
-                    $currentEnd = substr($overtime->end_time, 0, 5);
+                    $currentStart = $overtime->start_time ? substr($overtime->start_time, 0, 5) : '-';
+                    $currentEnd = $overtime->end_time ? substr($overtime->end_time, 0, 5) : '-';
                     $currentBreak = $overtime->break_duration;
                 @endphp
                 <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}" style="{{ $overtime->hours < 0 ? 'background-color: #ffeaea;' : '' }}">
                     <td>{{ $overtime->date->format('d/m/Y') }}</td>
                     <td>{{ ucfirst($overtime->date->translatedFormat('l')) }}</td>
-                    <td class="text-center" style="{{ $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentStart }}</td>
-                    <td class="text-center" style="{{ $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentEnd }}</td>
-                    <td class="text-center" style="{{ $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $currentBreak }} min</td>
-                    <td class="text-right">{{ number_format($overtime->worked_hours, 2) }}h</td>
+                    <td class="text-center" style="{{ $overtime->start_time && $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentStart : $baseStart }}</td>
+                    <td class="text-center" style="{{ $overtime->end_time && $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->end_time ? $currentEnd : $baseEnd }}</td>
+                    <td class="text-center" style="{{ $overtime->start_time && $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentBreak : $baseBreak }} min</td>
                     <td class="text-right">
-                        {{ $overtime->hours >= 0 ? number_format($overtime->hours, 2) . 'h' : '0.00h' }}
+                        @php
+                            // Calculer les heures travaillées à partir des horaires affichés
+                            $displayStart = $overtime->start_time ? $currentStart : $baseStart;
+                            $displayEnd = $overtime->end_time ? $currentEnd : $baseEnd;
+                            $displayBreak = $overtime->start_time ? $currentBreak : $baseBreak;
+                            
+                            $workedHours = '-';
+                            if (!$overtime->date->isWeekend() && !($displayStart === '00:00' && $displayEnd === '00:00')) {
+                                try {
+                                    list($sh, $sm) = explode(':', $displayStart);
+                                    list($eh, $em) = explode(':', $displayEnd);
+                                    $startMinutes = (int)$sh * 60 + (int)$sm;
+                                    $endMinutes = (int)$eh * 60 + (int)$em;
+                                    $totalMinutes = $endMinutes - $startMinutes - $displayBreak;
+                                    $calculatedHours = $totalMinutes / 60;
+                                    $workedHours = formatHoursMinutes($calculatedHours);
+                                } catch (\Exception $e) {
+                                    $workedHours = 'ERR';
+                                }
+                            }
+                            echo $workedHours;
+                        @endphp
                     </td>
-                    <td class="text-right" style="color: {{ $overtime->hours < 0 ? '#e74c3c' : '#000' }}; font-weight: {{ $overtime->hours < 0 ? 'bold' : 'normal' }}">
-                        {{ $overtime->hours < 0 && !$overtime->exclude_from_balance ? number_format(abs($overtime->hours), 2) . 'h' : ($overtime->exclude_from_balance ? '0.00h' : number_format($overtime->recovered_hours, 2) . 'h') }}
+                    <td class="text-right">
+                        {{ $overtime->start_time && $overtime->hours >= 0 ? formatHoursMinutes($overtime->hours) : '-' }}
+                    </td>
+                    <td class="text-right" style="color: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? '#e74c3c' : '#000' }}; font-weight: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? 'bold' : 'normal' }}">
+                        {{ $overtime->start_time ? ($overtime->recovered_hours > 0 ? formatHoursMinutes($overtime->recovered_hours) : ($overtime->hours < 0 ? formatHoursMinutes(abs($overtime->hours)) : '-')) : '-' }}
                     </td>
                     <td>{{ $overtime->reason ?? '' }}{{ $overtime->exclude_from_balance ? ' (Exclu)' : '' }}</td>
                 </tr>
+                @endif
             @endforeach
         </tbody>
         <tfoot>
             <tr style="font-weight: bold; background-color: #34495e; color: white;">
                 <td colspan="5">TOTAL</td>
-                <td class="text-right">{{ number_format($totalWorked, 2) }}h</td>
-                <td class="text-right">{{ number_format($totalOvertime, 2) }}h</td>
-                <td class="text-right">{{ number_format($totalRecovered, 2) }}h</td>
+                <td class="text-right">{{ formatHoursMinutes($displayedTotalWorked) }}</td>
+                <td class="text-right">{{ formatHoursMinutes($totalOvertime) }}</td>
+                <td class="text-right">{{ formatHoursMinutes($totalRecovered) }}</td>
                 <td></td>
             </tr>
         </tfoot>
