@@ -7,6 +7,7 @@
         body {
             font-family: Arial, sans-serif;
             font-size: 12px;
+            margin-bottom: 60px;
         }
         h1 {
             text-align: center;
@@ -78,6 +79,11 @@
         }
         .text-center {
             text-align: center;
+        }
+        
+        /* Styles pour le pied de page */
+        body {
+            margin-bottom: 60px;
         }
     </style>
 </head>

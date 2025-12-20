@@ -9,5 +9,6 @@ Route::post('/calendar/base-hours', [CalendarController::class, 'setBaseHours'])
 Route::post('/calendar/save-day', [CalendarController::class, 'saveDay'])->name('calendar.saveDay');
 Route::get('/calendar/export-month/{month}', [CalendarController::class, 'exportMonth'])->name('calendar.exportMonth');
 Route::get('/calendar/export-week/{date}', [CalendarController::class, 'exportWeek'])->name('calendar.exportWeek');
+Route::get('/calendar/export-custom', [CalendarController::class, 'exportCustom'])->name('calendar.exportCustom');
 
 Route::resource('overtimes', OvertimeController::class);

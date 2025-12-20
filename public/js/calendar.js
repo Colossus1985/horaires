@@ -8,7 +8,7 @@ function formatHoursToHM(decimalHours) {
 
 function calculateTimeDiff(startTime, endTime, breakMinutes = 0) {
     if (!startTime || !endTime) return 0;
-    
+
     // Cas spécial: 00:00-00:00 = pas d'horaires de base (weekend)
     if (startTime === "00:00" && endTime === "00:00") return 0;
 

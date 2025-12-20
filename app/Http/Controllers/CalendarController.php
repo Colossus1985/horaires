@@ -291,6 +291,16 @@ class CalendarController extends Controller
             'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
             'baseHours', 'totalWeekendHoliday'
         ));
+        $pdf->setOption('enable_php', true);
+        
+        // Rendre le PDF pour avoir le nombre de pages correct
+        $pdf->render();
+        
+        // Ajouter le pied de page sur toutes les pages
+        $canvas = $pdf->getDomPDF()->getCanvas();
+        $canvas->page_text(30, $canvas->get_height() - 30, "Généré le " . date('d/m/Y à H:i'), "helvetica", 9, array(0.5, 0.5, 0.5));
+        $canvas->page_text($canvas->get_width() / 2 - 30, $canvas->get_height() - 30, "Page {PAGE_NUM} / {PAGE_COUNT}", "helvetica", 9, array(0, 0, 0));
+        $canvas->page_text($canvas->get_width() - 100, $canvas->get_height() - 30, "Horaires Flo", "helvetica", 9, array(0.5, 0.5, 0.5));
         
         return $pdf->download('heures-' . $date->format('Y-m') . '.pdf');
     }
@@ -409,7 +419,156 @@ class CalendarController extends Controller
             'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
             'weekNumber', 'baseHours', 'totalWeekendHoliday'
         ));
+        $pdf->setOption('enable_php', true);
+        
+        // Rendre le PDF pour avoir le nombre de pages correct
+        $pdf->render();
+        
+        // Ajouter le pied de page sur toutes les pages
+        $canvas = $pdf->getDomPDF()->getCanvas();
+        $canvas->page_text(30, $canvas->get_height() - 30, "Généré le " . date('d/m/Y à H:i'), "helvetica", 9, array(0.5, 0.5, 0.5));
+        $canvas->page_text($canvas->get_width() / 2 - 30, $canvas->get_height() - 30, "Page {PAGE_NUM} / {PAGE_COUNT}", "helvetica", 9, array(0, 0, 0));
+        $canvas->page_text($canvas->get_width() - 100, $canvas->get_height() - 30, "Horaires Flo", "helvetica", 9, array(0.5, 0.5, 0.5));
         
         return $pdf->download('heures-semaine-' . $weekNumber . '-' . $startDate->format('Y') . '.pdf');
+    }
+    
+    public function exportCustom(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+        ]);
+        
+        $startDate = Carbon::parse($request->start_date);
+        $endDate = $request->end_date ? Carbon::parse($request->end_date) : Carbon::now();
+        
+        $userId = 1;
+        
+        // Récupérer les horaires par jour depuis la session
+        $baseHours = [];
+        for ($i = 1; $i <= 7; $i++) {
+            $baseHours[$i] = [
+                'start' => session('base_hours.' . $i . '.start', config('workhours.defaults.' . $i . '.start', '09:00')),
+                'end' => session('base_hours.' . $i . '.end', config('workhours.defaults.' . $i . '.end', '17:00')),
+                'break' => session('base_hours.' . $i . '.break', config('workhours.defaults.' . $i . '.break', 60)),
+            ];
+        }
+        
+        $overtimesData = Overtime::where('user_id', $userId)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->orderBy('date')
+            ->get()
+            ->keyBy(function($item) {
+                return $item->date->format('Y-m-d');
+            });
+        
+        // Créer une collection avec tous les jours de la période
+        $overtimes = collect();
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            if ($overtimesData->has($dateKey)) {
+                $overtimes->push($overtimesData[$dateKey]);
+            } else {
+                // Créer un objet vide pour les jours sans données
+                $empty = new Overtime();
+                $empty->date = $current->copy();
+                $empty->start_time = null;
+                $empty->end_time = null;
+                $empty->break_duration = 0;
+                $empty->worked_hours = 0;
+                $empty->hours = 0;
+                $empty->recovered_hours = 0;
+                $empty->reason = null;
+                $empty->exclude_from_balance = false;
+                $empty->base_start_time = $baseHours[$dayOfWeek]['start'];
+                $empty->base_end_time = $baseHours[$dayOfWeek]['end'];
+                $overtimes->push($empty);
+            }
+            $current->addDay();
+        }
+        
+        // Calculer le total des heures travaillées en incluant les weekends travaillés
+        $totalWorked = 0;
+        $current = $startDate->copy();
+        while ($current <= $endDate) {
+            $dateKey = $current->format('Y-m-d');
+            $dayOfWeek = $current->dayOfWeekIso;
+            
+            if ($overtimesData->has($dateKey)) {
+                // Jour saisi : utiliser les heures affichées
+                $ot = $overtimesData[$dateKey];
+                if ($ot->start_time) {
+                    // Recalculer à partir des horaires saisis
+                    $start = \Carbon\Carbon::parse($ot->start_time);
+                    $end = \Carbon\Carbon::parse($ot->end_time);
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                }
+            } else if (!$current->isWeekend()) {
+                // Jour non saisi et pas un weekend : utiliser les heures de base
+                $baseStart = $baseHours[$dayOfWeek]['start'];
+                $baseEnd = $baseHours[$dayOfWeek]['end'];
+                $baseBreak = $baseHours[$dayOfWeek]['break'];
+                
+                if (!($baseStart === '00:00' && $baseEnd === '00:00')) {
+                    $start = \Carbon\Carbon::createFromFormat('H:i', $baseStart);
+                    $end = \Carbon\Carbon::createFromFormat('H:i', $baseEnd);
+                    $totalWorked += $end->diffInMinutes($start) / 60 - ($baseBreak / 60);
+                }
+            }
+            $current->addDay();
+        }
+        
+        $totalOvertime = $overtimesData->where('hours', '>', 0)->where('exclude_from_balance', false)->sum('hours');
+        $totalMissing = $overtimesData->where('hours', '<', 0)->where('exclude_from_balance', false)->where('recovered_hours', 0)->sum(function($item) {
+            return abs($item->hours);
+        });
+        
+        // Total des heures récupérées pour affichage dans le tableau (toutes)
+        $totalRecoveredDisplay = $overtimesData->sum('recovered_hours');
+        
+        // Total des heures récupérées pour le calcul du solde (seulement non-exclues)
+        $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
+        
+        $balance = $totalOvertime - $totalMissing - $totalRecovered;
+        
+        // Calculer les heures travaillées en weekend/jours fériés
+        $holidays = $this->getFrenchHolidays($startDate->year);
+        // Si la période couvre plusieurs années, ajouter les jours fériés des autres années
+        if ($startDate->year != $endDate->year) {
+            for ($year = $startDate->year + 1; $year <= $endDate->year; $year++) {
+                $holidays = array_merge($holidays, $this->getFrenchHolidays($year));
+            }
+        }
+        
+        $totalWeekendHoliday = 0;
+        foreach($overtimesData as $ot) {
+            if ($ot->start_time && ($ot->date->isWeekend() || in_array($ot->date->format('Y-m-d'), $holidays))) {
+                $start = \Carbon\Carbon::parse($ot->start_time);
+                $end = \Carbon\Carbon::parse($ot->end_time);
+                $hoursWorked = $end->diffInMinutes($start) / 60 - ($ot->break_duration / 60);
+                $totalWeekendHoliday += abs($hoursWorked); // Valeur absolue pour toujours afficher positif
+            }
+        }
+        
+        $pdf = \PDF::loadView('calendar.pdf-custom', compact(
+            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'baseHours', 'totalWeekendHoliday'
+        ));
+        $pdf->setOption('enable_php', true);
+        
+        // Rendre le PDF pour avoir le nombre de pages correct
+        $pdf->render();
+        
+        // Ajouter le pied de page sur toutes les pages
+        $canvas = $pdf->getDomPDF()->getCanvas();
+        $canvas->page_text(30, $canvas->get_height() - 30, "Généré le " . date('d/m/Y à H:i'), "helvetica", 9, array(0.5, 0.5, 0.5));
+        $canvas->page_text($canvas->get_width() / 2 - 30, $canvas->get_height() - 30, "Page {PAGE_NUM} / {PAGE_COUNT}", "helvetica", 9, array(0, 0, 0));
+        $canvas->page_text($canvas->get_width() - 100, $canvas->get_height() - 30, "Horaires Flo", "helvetica", 9, array(0.5, 0.5, 0.5));
+        
+        return $pdf->download('heures-' . $startDate->format('Y-m-d') . '_au_' . $endDate->format('Y-m-d') . '.pdf');
     }
 }

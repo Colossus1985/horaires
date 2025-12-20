@@ -13,8 +13,16 @@
                 <a href="{{ url()->current() }}?month={{ $date->copy()->addMonth()->format('Y-m') }}" class="btn btn-primary">Mois suivant ▶</a>
             </div>
             
-            <div style="display: flex; gap: 10px;">
+            <div style="display: flex; gap: 10px; align-items: center;">
                 <a href="{{ route('calendar.exportMonth', ['month' => $date->format('Y-m')]) }}" class="btn btn-success">📥 Export Mois</a>
+                
+                <div style="display: flex; gap: 5px; align-items: center; background: #f8f9fa; padding: 8px; border-radius: 5px;">
+                    <label for="export-start-date" style="font-weight: bold; font-size: 14px; margin: 0;">Export personnalisé:</label>
+                    <input type="date" id="export-start-date" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;" value="{{ now()->startOfMonth()->format('Y-m-d') }}">
+                    <label for="export-end-date" style="font-weight: bold; font-size: 14px; margin: 0;">au</label>
+                    <input type="date" id="export-end-date" style="padding: 6px; border: 1px solid #ddd; border-radius: 4px;" value="{{ now()->format('Y-m-d') }}">
+                    <button onclick="exportCustom()" class="btn btn-primary">📥 Exporter</button>
+                </div>
             </div>
         </div>
 
@@ -239,5 +247,21 @@
     <script src="{{ asset('js/calendar.js') }}"></script>
     <script>
         initCalendar('{{ route('calendar.saveDay') }}', '{{ route('calendar.setBaseHours') }}', '{{ csrf_token() }}');
+        
+        function exportCustom() {
+            const startDate = document.getElementById('export-start-date').value;
+            const endDate = document.getElementById('export-end-date').value;
+            
+            if (!startDate) {
+                alert('Veuillez sélectionner une date de début');
+                return;
+            }
+            
+            // Créer l'URL avec les paramètres
+            const url = '{{ route('calendar.exportCustom') }}?start_date=' + startDate + '&end_date=' + (endDate || '');
+            
+            // Ouvrir dans un nouvel onglet pour télécharger
+            window.open(url, '_blank');
+        }
     </script>
 @endsection

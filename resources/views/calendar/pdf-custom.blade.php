@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Heures - Semaine {{ $weekNumber }}</title>
+    <title>Heures - Du {{ $startDate->format('d/m/Y') }} au {{ $endDate->format('d/m/Y') }}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -120,7 +120,7 @@
             }
         }
     @endphp
-    <h1>Récapitulatif des Heures - Semaine {{ $weekNumber }} ({{ $startDate->format('d/m/Y') }} - {{ $endDate->format('d/m/Y') }})</h1>
+    <h1>Récapitulatif des Heures<br>Du {{ $startDate->format('d/m/Y') }} au {{ $endDate->format('d/m/Y') }}</h1>
     
     <div class="info">
         <strong>Horaires de base :</strong> 
