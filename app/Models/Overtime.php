@@ -75,9 +75,9 @@ class Overtime extends Model
             }
             
             // Base hours = durée de présence de base - pause de base
-            // Note: La pause de base devrait être stockée ou récupérée depuis la session
-            // Pour l'instant, on utilise break_duration si c'est le même jour
-            $baseBreak = session('base_hours.' . $this->date->dayOfWeekIso . '.break', 0);
+            // Utiliser la pause de base depuis la session ou la config par défaut
+            $baseBreak = session('base_hours.' . $this->date->dayOfWeekIso . '.break', 
+                                config('workhours.defaults.' . $this->date->dayOfWeekIso . '.break', 0));
             $this->base_hours = $start->diffInMinutes($end, false) / 60 - ($baseBreak / 60);
         }
 
