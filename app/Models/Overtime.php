@@ -66,19 +66,24 @@ class Overtime extends Model
         }
 
         if ($this->base_start_time && $this->base_end_time) {
-            // Parser les heures en ajoutant une date de référence
-            $start = \Carbon\Carbon::parse('2000-01-01 ' . $this->base_start_time);
-            $end = \Carbon\Carbon::parse('2000-01-01 ' . $this->base_end_time);
-            
-            if ($end->lessThan($start)) {
-                $end->addDay();
+            // Cas spécial : 00:00-00:00 = pas d'horaires de base (weekend/férié)
+            if ($this->base_start_time === '00:00:00' && $this->base_end_time === '00:00:00') {
+                $this->base_hours = 0;
+            } else {
+                // Parser les heures en ajoutant une date de référence
+                $start = \Carbon\Carbon::parse('2000-01-01 ' . $this->base_start_time);
+                $end = \Carbon\Carbon::parse('2000-01-01 ' . $this->base_end_time);
+                
+                if ($end->lessThan($start)) {
+                    $end->addDay();
+                }
+                
+                // Base hours = durée de présence de base - pause de base
+                // Utiliser la pause de base depuis la session ou la config par défaut
+                $baseBreak = session('base_hours.' . $this->date->dayOfWeekIso . '.break', 
+                                    config('workhours.defaults.' . $this->date->dayOfWeekIso . '.break', 0));
+                $this->base_hours = ($start->diffInMinutes($end, false) - $baseBreak) / 60;
             }
-            
-            // Base hours = durée de présence de base - pause de base
-            // Utiliser la pause de base depuis la session ou la config par défaut
-            $baseBreak = session('base_hours.' . $this->date->dayOfWeekIso . '.break', 
-                                config('workhours.defaults.' . $this->date->dayOfWeekIso . '.break', 0));
-            $this->base_hours = $start->diffInMinutes($end, false) / 60 - ($baseBreak / 60);
         }
 
         // Heures supplémentaires = heures travaillées - heures de base

@@ -92,6 +92,9 @@
         function formatHoursMinutes($decimalHours) {
             $hours = floor($decimalHours);
             $minutes = round(($decimalHours - $hours) * 60);
+            if ($hours == 0 && $minutes == 0) {
+                return '-';
+            }
             return sprintf('%dh%02d', $hours, $minutes);
         }
         
@@ -188,13 +191,33 @@
                     $currentStart = $overtime->start_time ? substr($overtime->start_time, 0, 5) : '-';
                     $currentEnd = $overtime->end_time ? substr($overtime->end_time, 0, 5) : '-';
                     $currentBreak = $overtime->break_duration;
+                    
+                    // Vérifier si c'est un jour férié
+                    $holidays = [];
+                    $easterYear = Carbon\Carbon::createFromTimestamp(easter_date($overtime->date->year));
+                    $holidays = [
+                        $overtime->date->year."-01-01",
+                        $overtime->date->year."-05-01",
+                        $overtime->date->year."-05-08",
+                        $overtime->date->year."-07-14",
+                        $overtime->date->year."-08-15",
+                        $overtime->date->year."-11-01",
+                        $overtime->date->year."-11-11",
+                        $overtime->date->year."-12-20",
+                        $overtime->date->year."-12-25",
+                        $easterYear->copy()->addDay()->format('Y-m-d'),
+                        $easterYear->copy()->addDays(39)->format('Y-m-d'),
+                        $easterYear->copy()->addDays(50)->format('Y-m-d'),
+                    ];
+                    $isHoliday = in_array($overtime->date->format('Y-m-d'), $holidays);
+                    $isWeekendOrHoliday = $overtime->date->isWeekend() || $isHoliday;
                 @endphp
-                <tr class="{{ $overtime->date->isWeekend() ? 'weekend' : '' }}" style="{{ $overtime->date->isWeekend() && $overtime->start_time ? 'background-color: #ffcccc; color: #e67e22; font-weight: bold;' : ($overtime->hours < 0 ? 'background-color: #ffeaea;' : '') }}">
+                <tr class="{{ $isWeekendOrHoliday ? 'weekend' : '' }}" style="{{ $isWeekendOrHoliday && $overtime->start_time ? 'background-color: #ffcccc; color: #e67e22; font-weight: bold;' : ($overtime->hours < 0 ? 'background-color: #ffeaea;' : '') }}">
                     <td>{{ $overtime->date->format('d/m/Y') }}</td>
                     <td>{{ ucfirst($overtime->date->translatedFormat('l')) }}</td>
-                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->start_time && $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentStart : $baseStart }}</td>
-                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->end_time && $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->end_time ? $currentEnd : $baseEnd }}</td>
-                    <td class="text-center" style="{{ !$overtime->date->isWeekend() && $overtime->start_time && $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentBreak : $baseBreak }} min</td>
+                    <td class="text-center" style="{{ !$isWeekendOrHoliday && $overtime->start_time && $currentStart != $baseStart ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentStart : $baseStart }}</td>
+                    <td class="text-center" style="{{ !$isWeekendOrHoliday && $overtime->end_time && $currentEnd != $baseEnd ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->end_time ? $currentEnd : $baseEnd }}</td>
+                    <td class="text-center" style="{{ !$isWeekendOrHoliday && $overtime->start_time && $currentBreak != $baseBreak ? 'color: #e67e22; font-weight: bold;' : '' }}">{{ $overtime->start_time ? $currentBreak : $baseBreak }} min</td>
                     <td class="text-right">
                         @php
                             // Calculer les heures travaillées à partir des horaires affichés
@@ -203,8 +226,8 @@
                             $displayBreak = $overtime->start_time ? $currentBreak : $baseBreak;
                             
                             $workedHours = '-';
-                            // Afficher les heures pour les jours en semaine OU les weekends travaillés
-                            if ((!$overtime->date->isWeekend() || $overtime->start_time) && !($displayStart === '00:00' && $displayEnd === '00:00')) {
+                            // Afficher les heures pour les jours en semaine OU les weekends/fériés travaillés
+                            if ((!$isWeekendOrHoliday || $overtime->start_time) && !($displayStart === '00:00' && $displayEnd === '00:00')) {
                                 try {
                                     list($sh, $sm) = explode(':', $displayStart);
                                     list($eh, $em) = explode(':', $displayEnd);
@@ -222,8 +245,8 @@
                     </td>
                     <td class="text-right">
                         @php
-                            // Pour les weekends travaillés, afficher les heures dans Supp
-                            if ($overtime->date->isWeekend() && $overtime->start_time) {
+                            // Pour les weekends/fériés travaillés, afficher les heures dans Supp
+                            if ($isWeekendOrHoliday && $overtime->start_time) {
                                 $displayStart = $currentStart;
                                 $displayEnd = $currentEnd;
                                 $displayBreak = $currentBreak;
@@ -241,8 +264,8 @@
                     </td>
                     <td class="text-right" style="color: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? '#e74c3c' : '#000' }}; font-weight: {{ $overtime->hours < 0 || $overtime->recovered_hours > 0 ? 'bold' : 'normal' }}">
                         @php
-                            // Pour les weekends, afficher uniquement les heures récupérées
-                            if ($overtime->date->isWeekend() && $overtime->start_time) {
+                            // Pour les weekends/fériés, afficher uniquement les heures récupérées
+                            if ($isWeekendOrHoliday && $overtime->start_time) {
                                 echo $overtime->recovered_hours > 0 ? formatHoursMinutes($overtime->recovered_hours) : '-';
                             } else {
                                 // Pour les jours en semaine, afficher récupérées OU heures négatives
@@ -260,7 +283,7 @@
                 <td colspan="5">TOTAL</td>
                 <td class="text-right">{{ formatHoursMinutes($displayedTotalWorked) }}</td>
                 <td class="text-right">{{ formatHoursMinutes($totalOvertime) }}</td>
-                <td class="text-right">{{ formatHoursMinutes($totalRecoveredDisplay) }}</td>
+                <td class="text-right">{{ formatHoursMinutes($totalDelta) }}</td>
                 <td></td>
             </tr>
         </tfoot>

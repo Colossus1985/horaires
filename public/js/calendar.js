@@ -3,6 +3,9 @@ let pendingSaves = 0; // Compteur de sauvegardes en cours
 function formatHoursToHM(decimalHours) {
     const hours = Math.floor(decimalHours);
     const minutes = Math.round((decimalHours - hours) * 60);
+    if (hours === 0 && minutes === 0) {
+        return "-";
+    }
     return `${hours}h${minutes.toString().padStart(2, "0")}`;
 }
 

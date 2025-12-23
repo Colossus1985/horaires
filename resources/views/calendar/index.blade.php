@@ -29,23 +29,23 @@
         <div class="stats-summary" id="stats">
             <div class="stat-box">
                 <h4>Heures travaillées</h4>
-                <div class="value" id="total-worked">0h00</div>
+                <div class="value" id="total-worked">-</div>
             </div>
             <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
                 <h4>Heures supplémentaires</h4>
-                <div class="value" id="total-overtime">0h00</div>
+                <div class="value" id="total-overtime">-</div>
             </div>
             <div class="stat-box" style="background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);">
                 <h4>Heures manquantes</h4>
-                <div class="value" id="total-missing">0h00</div>
+                <div class="value" id="total-missing">-</div>
             </div>
             <div class="stat-box" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
                 <h4>Heures récupérées</h4>
-                <div class="value" id="total-recovered">0h00</div>
+                <div class="value" id="total-recovered">-</div>
             </div>
             <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
                 <h4>Solde</h4>
-                <div class="value" id="total-balance">0h00</div>
+                <div class="value" id="total-balance">-</div>
             </div>
         </div>
 

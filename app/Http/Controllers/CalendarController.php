@@ -288,7 +288,7 @@ class CalendarController extends Controller
         }
         
         $pdf = \PDF::loadView('calendar.pdf-month', compact(
-            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'date', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'totalDelta', 'balance',
             'baseHours', 'totalWeekendHoliday'
         ));
         $pdf->setOption('enable_php', true);
@@ -400,6 +400,9 @@ class CalendarController extends Controller
         // Total des heures récupérées pour le calcul du solde (seulement non-exclues)
         $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
         
+        // Total de la colonne Delta - (heures récupérées + heures manquantes)
+        $totalDelta = $totalRecoveredDisplay + $totalMissing;
+        
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         $weekNumber = $startDate->week;
         
@@ -416,7 +419,7 @@ class CalendarController extends Controller
         }
         
         $pdf = \PDF::loadView('calendar.pdf-week', compact(
-            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'totalDelta', 'balance',
             'weekNumber', 'baseHours', 'totalWeekendHoliday'
         ));
         $pdf->setOption('enable_php', true);
@@ -533,6 +536,9 @@ class CalendarController extends Controller
         // Total des heures récupérées pour le calcul du solde (seulement non-exclues)
         $totalRecovered = $overtimesData->where('exclude_from_balance', false)->sum('recovered_hours');
         
+        // Total de la colonne Delta - (heures récupérées + heures manquantes)
+        $totalDelta = $totalRecoveredDisplay + $totalMissing;
+        
         $balance = $totalOvertime - $totalMissing - $totalRecovered;
         
         // Calculer les heures travaillées en weekend/jours fériés
@@ -555,7 +561,7 @@ class CalendarController extends Controller
         }
         
         $pdf = \PDF::loadView('calendar.pdf-custom', compact(
-            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'balance',
+            'startDate', 'endDate', 'overtimes', 'totalWorked', 'totalOvertime', 'totalMissing', 'totalRecovered', 'totalRecoveredDisplay', 'totalDelta', 'balance',
             'baseHours', 'totalWeekendHoliday'
         ));
         $pdf->setOption('enable_php', true);
